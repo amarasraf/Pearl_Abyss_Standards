@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "766676049366",
+    "project_id": "sleipnir-database",
+    "storage_bucket": "sleipnir-database.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:766676049366:android:82016d3b92ef8456411877",
+        "android_client_info": {
+          "package_name": "com.example.csvreader"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB79YS1gtBI7WeW1xJKp4OnAWu2Ocgzijo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

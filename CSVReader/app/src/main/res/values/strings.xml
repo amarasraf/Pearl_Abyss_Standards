@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Sleipnir</string>
+    <string name="accessibility_description">Sleipnir automated delivery tracking assistant</string>
+</resources>

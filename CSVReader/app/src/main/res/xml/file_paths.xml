@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Expose external storage where the DownloadManager saves files -->
+    <external-path name="external_files" path="." />
+    <!-- Also expose downloads directory explicitly just in case -->
+    <external-files-path name="external_downloads" path="Download" />
+</paths>
