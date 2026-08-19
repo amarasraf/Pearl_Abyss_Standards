@@ -1,0 +1,22 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        API_URL: http://backend:8000
+    ports:
+      - "3000:3000"
+    environment:
+      - API_URL=http://backend:8000
+      - NEXT_PUBLIC_STATION_NAME=C4-NIL-5-85
+    depends_on:
+      - backend
+    restart: unless-stopped
