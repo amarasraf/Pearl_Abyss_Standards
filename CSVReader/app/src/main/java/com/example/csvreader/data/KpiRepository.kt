@@ -2,8 +2,9 @@ package com.example.csvreader.data
 
 import java.net.HttpURLConnection
 import java.net.URL
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -27,7 +28,7 @@ data class KpiSnapshot(
     val stationName: String,
     val zone: String,
     val sourceUpdatedAt: String,
-    val fetchedAt: LocalDateTime,
+    val fetchedAtMillis: Long,
     val metrics: List<KpiMetric>,
 )
 
@@ -90,7 +91,7 @@ object KpiCsvParser {
             stationName = station.getOrNull(3).orEmpty().ifBlank { "Nilai" },
             zone = station.getOrNull(0).orEmpty(),
             sourceUpdatedAt = header.getOrNull(1).orEmpty().substringBefore(" GROUP").trim(),
-            fetchedAt = LocalDateTime.now(),
+            fetchedAtMillis = System.currentTimeMillis(),
             metrics =
                 listOf(
                     metric("FIFO D0", 95.0, 4, 5, 6),
@@ -146,4 +147,4 @@ object KpiCsvParser {
 }
 
 fun KpiSnapshot.fetchedAtLabel(): String =
-    fetchedAt.format(DateTimeFormatter.ofPattern("dd MMM, h:mm a"))
+    SimpleDateFormat("dd MMM, h:mm a", Locale.getDefault()).format(Date(fetchedAtMillis))

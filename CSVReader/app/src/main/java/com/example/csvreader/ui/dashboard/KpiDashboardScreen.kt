@@ -36,6 +36,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.csvreader.data.KpiMetric
 import com.example.csvreader.data.KpiSnapshot
 import com.example.csvreader.data.fetchedAtLabel
+import java.util.Locale
 
 private val Navy = Color(0xFF080D1D)
 private val Indigo = Color(0xFF6E5BFF)
@@ -208,7 +209,7 @@ private fun HeroCard(snapshot: KpiSnapshot) {
     ) {
         Column(Modifier.padding(22.dp)) {
             Text(
-                text = "STATION ${snapshot.stationName.uppercase()}",
+                text = "STATION ${snapshot.stationName.uppercase(Locale.getDefault())}",
                 color = Cyan,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
@@ -316,6 +317,7 @@ private fun ErrorPanel(message: String, onRetry: () -> Unit, modifier: Modifier 
 }
 
 private fun Double.asPercent(): String =
-    if (this % 1.0 == 0.0) "${toInt()}%" else String.format("%.2f%%", this)
+    if (this % 1.0 == 0.0) "${toInt()}%"
+    else String.format(Locale.getDefault(), "%.2f%%", this)
 
 private fun Int?.orEmptyNumber(): String = this?.toString() ?: "0"

@@ -17,26 +17,35 @@ import androidx.work.WorkerParameters
 import com.example.csvreader.MainActivity
 import com.example.csvreader.R
 import com.example.csvreader.data.KpiRepository
-import java.time.Duration
-import java.time.ZonedDateTime
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 object DailyKpiAlertScheduler {
     private const val UNIQUE_WORK_PREFIX = "nilai-daily-kpi-alert"
 
     fun schedule(context: Context) {
-        val now = ZonedDateTime.now()
-        var nextRun = now.withHour(22).withMinute(0).withSecond(0).withNano(0)
-        if (!nextRun.isAfter(now)) nextRun = nextRun.plusDays(1)
+        val now = System.currentTimeMillis()
+        val nextRun =
+            Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 22)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+                if (timeInMillis <= now) add(Calendar.DAY_OF_YEAR, 1)
+            }
 
         val request =
             OneTimeWorkRequestBuilder<DailyKpiAlertWorker>()
-                .setInitialDelay(Duration.between(now, nextRun).toMillis(), TimeUnit.MILLISECONDS)
+                .setInitialDelay(nextRun.timeInMillis - now, TimeUnit.MILLISECONDS)
                 .build()
+        val scheduledDate =
+            SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(nextRun.time)
 
         WorkManager.getInstance(context)
             .enqueueUniqueWork(
-                "$UNIQUE_WORK_PREFIX-${nextRun.toLocalDate()}",
+                "$UNIQUE_WORK_PREFIX-$scheduledDate",
                 ExistingWorkPolicy.KEEP,
                 request,
             )
@@ -56,7 +65,11 @@ class DailyKpiAlertWorker(
                 result.fold(
                     onSuccess = { snapshot ->
                         snapshot.metrics.joinToString("  •  ") { metric ->
-                            "${metric.name}: ${metric.currentPercent?.let { "%.2f%%".format(it) } ?: "N/A"}"
+                            "${metric.name}: ${
+                                metric.currentPercent?.let {
+                                    String.format(Locale.getDefault(), "%.2f%%", it)
+                                } ?: "N/A"
+                            }"
                         }
                     },
                     onFailure = { "KPI data is temporarily unavailable. Open the dashboard to retry." },
