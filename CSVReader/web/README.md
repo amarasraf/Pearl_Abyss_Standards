@@ -34,33 +34,19 @@ For Google OAuth, configure these authorized redirect URIs:
 
 The cron schedule is `0 14 * * *`, which is 10 PM in `Asia/Kuala_Lumpur`.
 
-To keep leftover-status drilldown live, open the NILAI KPI workbook, add a tab named `Raw Data`, and paste this in **A1**:
+The NILAI KPI workbook already has a live `Raw Data` tab (`gid=1615722066`) imported from the master sheet. Drilldown reads:
 
 ```
-=IMPORTRANGE("10v98YLO0emCB_ZdGE5E4W_wribgyKZJ-P2O6UDj3Tpk","'Raw Data'!A:ZZ")
+https://docs.google.com/spreadsheets/d/1-crbMCbGgsHydSUQzhVpWHwS7wRniHt8TN9z-7XQ8Pk/gviz/tq?tqx=out:csv&gid=1615722066
 ```
 
-Optional Nilai-only filter (same cell, instead of the formula above):
-
-```
-=QUERY(IMPORTRANGE("10v98YLO0emCB_ZdGE5E4W_wribgyKZJ-P2O6UDj3Tpk","'Raw Data'!A:ZZ"),"select * where Col2 = 'C4-NIL-5-85' or Col9 = 'C4-NIL-5-85'",1)
-```
-
-If A1 shows `#REF!`, click **Allow access**. Do not wrap the tab name in extra `< >`.
-
-Then set `GOOGLE_RAW_CSV_URL` to that tab's CSV export:
-
-```
-https://docs.google.com/spreadsheets/d/1-crbMCbGgsHydSUQzhVpWHwS7wRniHt8TN9z-7XQ8Pk/gviz/tq?tqx=out:csv&gid=PASTE_RAW_DATA_GID
-```
-
-The published Raw Data tab counts `tracking_id` by status; it does not list tracking numbers. If you find the A–L parcel dump tab, import it with:
+Set `GOOGLE_RAW_CSV_URL` to that CSV if you override the default. The tab counts `tracking_id` by status; it does not list tracking numbers. If you find the A–L parcel dump tab, import it with:
 
 ```
 =IMPORTRANGE("10v98YLO0emCB_ZdGE5E4W_wribgyKZJ-P2O6UDj3Tpk","'PASTE_DUMP_TAB_NAME'!A:L")
 ```
 
-An Apps Script version of these imports is in `scripts/import-master-tabs.gs`.
+An Apps Script helper is in `scripts/import-master-tabs.gs`.
 
 ## Security
 

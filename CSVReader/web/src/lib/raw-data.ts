@@ -3,7 +3,7 @@ import { STATION_CODE } from "@/lib/kpi";
 
 export const RAW_DATA_CSV_URL =
   process.env.GOOGLE_RAW_CSV_URL ??
-  "https://docs.google.com/spreadsheets/d/13FkrRLKS1HBhIYQtQTEyZ-QD4pa0_169VUTx5HGY8F0/gviz/tq?tqx=out:csv&gid=2124284441";
+  "https://docs.google.com/spreadsheets/d/1-crbMCbGgsHydSUQzhVpWHwS7wRniHt8TN9z-7XQ8Pk/gviz/tq?tqx=out:csv&gid=1615722066";
 
 export type StatusCount = {
   status: string;
@@ -21,22 +21,58 @@ export type MetricBreakdown = {
   note: string;
 };
 
-const FIFO_STATUSES = [
-  "Arrived at Sorting Hub",
-  "On Hold",
-  "On Vehicle for Delivery",
-];
-
-const PRIOR_STATUSES = [
-  "Arrived at Sorting Hub",
-  "En-route to Sorting Hub",
-  "On Hold",
-  "On Vehicle for Delivery",
-  "Pending Reschedule",
-];
+const STATUS_LABELS: Record<string, string> = {
+  "arrived at sorting hub": "Arrived at Sorting Hub",
+  cancelled: "Cancelled",
+  "en-route to sorting hub": "En-route to Sorting Hub",
+  "on hold": "On Hold",
+  "on vehicle for delivery": "On Vehicle for Delivery",
+  "pending reschedule": "Pending Reschedule",
+};
 
 const numberOrZero = (value: string | undefined) =>
   Number.parseInt((value ?? "").replaceAll(",", ""), 10) || 0;
+
+const looksLikeStation = (value: string | undefined) =>
+  /^C\d-[A-Z0-9]+-\d+-\d+$/i.test((value ?? "").trim());
+
+function headerLabel(value: string | undefined): string {
+  const raw = (value ?? "")
+    .replaceAll("🎉", "")
+    .replace(/SUCCESS/gi, "")
+    .replace(/granular_status/gi, "")
+    .replace(/Data Status/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (/grand total/i.test(raw)) return "Grand Total";
+  return STATUS_LABELS[raw.toLowerCase()] ?? raw;
+}
+
+function extractBlock(
+  row: string[],
+  header: string[],
+  stationCol: number,
+): { statuses: StatusCount[]; totalPending: number } {
+  const statuses: StatusCount[] = [];
+  let totalPending = 0;
+  const last = Math.max(row.length, header.length);
+  for (let index = stationCol + 1; index < last; index += 1) {
+    if (looksLikeStation(row[index])) break;
+    const label = headerLabel(header[index]);
+    if (label === "Grand Total") {
+      totalPending = numberOrZero(row[index]);
+      break;
+    }
+    if (STATUS_LABELS[label.toLowerCase()]) {
+      statuses.push({ status: label, count: numberOrZero(row[index]) });
+    }
+  }
+  return {
+    statuses: statuses.filter((item) => item.count > 0),
+    totalPending:
+      totalPending || statuses.reduce((sum, item) => sum + item.count, 0),
+  };
+}
 
 export function parseRawDataPivot(
   csv: string,
@@ -50,27 +86,25 @@ export function parseRawDataPivot(
   if (!records.length) throw new Error("The Raw Data tab is empty");
 
   const header = records[0] ?? [];
-  const sourceUpdatedAt = header[1]?.match(
-    /\d{2}\/\d{2}\/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s+[AP]M/,
-  )?.[0] ?? "";
+  const sourceUpdatedAt =
+    header[1]?.match(
+      /\d{2}\/\d{2}\/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s+[AP]M/,
+    )?.[0] ?? "";
 
   const stationRow =
-    records.find(
-      (row) => row[1]?.trim() === stationCode || row[8]?.trim() === stationCode,
-    ) ?? null;
+    records.find((row) => row.some((cell) => cell?.trim() === stationCode)) ??
+    null;
   if (!stationRow) {
     throw new Error(`Station ${stationCode} was not found in Raw Data`);
   }
 
-  const fifoStatuses = FIFO_STATUSES.map((status, index) => ({
-    status,
-    count: numberOrZero(stationRow[2 + index]),
-  })).filter((item) => item.count > 0);
-
-  const priorStatuses = PRIOR_STATUSES.map((status, index) => ({
-    status,
-    count: numberOrZero(stationRow[9 + index]),
-  })).filter((item) => item.count > 0);
+  const stationCols = stationRow
+    .map((cell, index) => (cell?.trim() === stationCode ? index : -1))
+    .filter((index) => index >= 0);
+  const fifoCol = stationCols[0] ?? 1;
+  const priorCol = stationCols[1] ?? stationCols[0] ?? 8;
+  const fifo = extractBlock(stationRow, header, fifoCol);
+  const prior = extractBlock(stationRow, header, priorCol);
 
   const note =
     "This tab counts tracking_id by status. It does not list the tracking numbers themselves. Import the parcel dump (columns A-L) to show successful and pending tracking IDs.";
@@ -81,8 +115,8 @@ export function parseRawDataPivot(
       title: "FIFO D0 left to attempt",
       stationCode,
       sourceUpdatedAt,
-      totalPending: numberOrZero(stationRow[5]),
-      statuses: fifoStatuses,
+      totalPending: fifo.totalPending,
+      statuses: fifo.statuses,
       trackingNumbersAvailable: false,
       note,
     },
@@ -91,8 +125,8 @@ export function parseRawDataPivot(
       title: "PRIOR D0 left to success",
       stationCode,
       sourceUpdatedAt,
-      totalPending: numberOrZero(stationRow[14]),
-      statuses: priorStatuses,
+      totalPending: prior.totalPending,
+      statuses: prior.statuses,
       trackingNumbersAvailable: false,
       note,
     },

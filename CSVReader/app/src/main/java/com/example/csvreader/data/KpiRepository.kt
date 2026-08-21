@@ -14,7 +14,7 @@ object KpiConfig {
     const val SHEET_CSV_URL =
         "https://docs.google.com/spreadsheets/d/1-crbMCbGgsHydSUQzhVpWHwS7wRniHt8TN9z-7XQ8Pk/gviz/tq?tqx=out:csv&gid=0"
     const val RAW_DATA_CSV_URL =
-        "https://docs.google.com/spreadsheets/d/13FkrRLKS1HBhIYQtQTEyZ-QD4pa0_169VUTx5HGY8F0/gviz/tq?tqx=out:csv&gid=2124284441"
+        "https://docs.google.com/spreadsheets/d/1-crbMCbGgsHydSUQzhVpWHwS7wRniHt8TN9z-7XQ8Pk/gviz/tq?tqx=out:csv&gid=1615722066"
 }
 
 data class KpiMetric(
@@ -160,28 +160,17 @@ object KpiCsvParser {
                 ?.value
                 .orEmpty()
         val station =
-            records.firstOrNull { row ->
-                row.getOrNull(1)?.trim() == stationCode || row.getOrNull(8)?.trim() == stationCode
-            } ?: error("Station $stationCode was not found in Raw Data")
+            records.firstOrNull { row -> row.any { cell -> cell.trim() == stationCode } }
+                ?: error("Station $stationCode was not found in Raw Data")
 
-        val fifoStatuses =
-            listOf("Arrived at Sorting Hub", "On Hold", "On Vehicle for Delivery")
-                .mapIndexed { index, status ->
-                    StatusCount(status, station.getOrNull(2 + index).toIntOrZero())
-                }
-                .filter { it.count > 0 }
-        val priorStatuses =
-            listOf(
-                    "Arrived at Sorting Hub",
-                    "En-route to Sorting Hub",
-                    "On Hold",
-                    "On Vehicle for Delivery",
-                    "Pending Reschedule",
-                )
-                .mapIndexed { index, status ->
-                    StatusCount(status, station.getOrNull(9 + index).toIntOrZero())
-                }
-                .filter { it.count > 0 }
+        val stationCols =
+            station.mapIndexedNotNull { index, cell ->
+                index.takeIf { cell.trim() == stationCode }
+            }
+        val fifoCol = stationCols.getOrNull(0) ?: 1
+        val priorCol = stationCols.getOrNull(1) ?: stationCols.getOrNull(0) ?: 8
+        val fifo = extractStatusBlock(station, header, fifoCol)
+        val prior = extractStatusBlock(station, header, priorCol)
         val note =
             "This tab counts tracking_id by status. It does not list tracking numbers. Import the parcel dump in columns A-L to show successful and pending tracking IDs."
 
@@ -189,8 +178,8 @@ object KpiCsvParser {
             MetricBreakdown(
                 metricName = metricName,
                 title = "PRIOR D0 left to success",
-                totalPending = station.getOrNull(14).toIntOrZero(),
-                statuses = priorStatuses,
+                totalPending = prior.totalPending,
+                statuses = prior.statuses,
                 note = note,
                 sourceUpdatedAt = sourceUpdatedAt,
             )
@@ -198,12 +187,41 @@ object KpiCsvParser {
             MetricBreakdown(
                 metricName = metricName,
                 title = "FIFO D0 left to attempt",
-                totalPending = station.getOrNull(5).toIntOrZero(),
-                statuses = fifoStatuses,
+                totalPending = fifo.totalPending,
+                statuses = fifo.statuses,
                 note = note,
                 sourceUpdatedAt = sourceUpdatedAt,
             )
         }
+    }
+
+    private data class StatusBlock(val statuses: List<StatusCount>, val totalPending: Int)
+
+    private fun extractStatusBlock(
+        row: List<String>,
+        header: List<String>,
+        stationCol: Int,
+    ): StatusBlock {
+        val statuses = mutableListOf<StatusCount>()
+        var totalPending = 0
+        val last = maxOf(row.size, header.size)
+        for (index in (stationCol + 1) until last) {
+            val cell = row.getOrNull(index).orEmpty()
+            if (cell.trim().looksLikeStation()) break
+            val label = header.getOrNull(index).toHeaderLabel()
+            if (label == "Grand Total") {
+                totalPending = cell.toIntOrZero()
+                break
+            }
+            if (label in STATUS_LABELS.values) {
+                statuses += StatusCount(label, cell.toIntOrZero())
+            }
+        }
+        val pending = statuses.filter { it.count > 0 }
+        return StatusBlock(
+            statuses = pending,
+            totalPending = if (totalPending > 0) totalPending else pending.sumOf { it.count },
+        )
     }
 
     private fun parseRecords(csv: String): List<List<String>> {
@@ -249,6 +267,32 @@ object KpiCsvParser {
 
     private fun String?.toIntOrZero(): Int =
         this?.trim()?.replace(",", "")?.toDoubleOrNull()?.toInt() ?: 0
+
+    private fun String.looksLikeStation(): Boolean =
+        Regex("""^C\d-[A-Z0-9]+-\d+-\d+$""", RegexOption.IGNORE_CASE).matches(trim())
+
+    private fun String?.toHeaderLabel(): String {
+        val raw =
+            this.orEmpty()
+                .replace("🎉", "")
+                .replace(Regex("SUCCESS", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("granular_status", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("Data Status", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+        if (raw.contains("Grand Total", ignoreCase = true)) return "Grand Total"
+        return STATUS_LABELS[raw.lowercase()] ?: raw
+    }
+
+    private val STATUS_LABELS =
+        mapOf(
+            "arrived at sorting hub" to "Arrived at Sorting Hub",
+            "cancelled" to "Cancelled",
+            "en-route to sorting hub" to "En-route to Sorting Hub",
+            "on hold" to "On Hold",
+            "on vehicle for delivery" to "On Vehicle for Delivery",
+            "pending reschedule" to "Pending Reschedule",
+        )
 }
 
 fun KpiSnapshot.fetchedAtLabel(): String =
