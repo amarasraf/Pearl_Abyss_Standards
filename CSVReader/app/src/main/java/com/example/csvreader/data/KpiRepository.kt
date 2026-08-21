@@ -13,6 +13,8 @@ object KpiConfig {
     const val STATION_CODE = "C4-NIL-5-85"
     const val SHEET_CSV_URL =
         "https://docs.google.com/spreadsheets/d/1-crbMCbGgsHydSUQzhVpWHwS7wRniHt8TN9z-7XQ8Pk/gviz/tq?tqx=out:csv&gid=0"
+    const val RAW_DATA_CSV_URL =
+        "https://docs.google.com/spreadsheets/d/13FkrRLKS1HBhIYQtQTEyZ-QD4pa0_169VUTx5HGY8F0/gviz/tq?tqx=out:csv&gid=2124284441"
 }
 
 data class KpiMetric(
@@ -30,6 +32,17 @@ data class KpiSnapshot(
     val sourceUpdatedAt: String,
     val fetchedAtMillis: Long,
     val metrics: List<KpiMetric>,
+)
+
+data class StatusCount(val status: String, val count: Int)
+
+data class MetricBreakdown(
+    val metricName: String,
+    val title: String,
+    val totalPending: Int,
+    val statuses: List<StatusCount>,
+    val note: String,
+    val sourceUpdatedAt: String = "",
 )
 
 class KpiRepository {
@@ -55,6 +68,41 @@ class KpiRepository {
             connection.disconnect()
         }
     }
+
+    suspend fun fetchMetricBreakdown(metricName: String): MetricBreakdown =
+        withContext(Dispatchers.IO) {
+            if (metricName == "D0 Completion") {
+                return@withContext MetricBreakdown(
+                    metricName = metricName,
+                    title = "D0 Completion leftover",
+                    totalPending = 0,
+                    statuses = emptyList(),
+                    note =
+                        "The Raw Data tab only pivots FIFO and PRIOR leftovers. Completion tracking IDs are not in this published structure.",
+                )
+            }
+
+            val connection =
+                (URL("${KpiConfig.RAW_DATA_CSV_URL}&cacheBust=${System.currentTimeMillis()}")
+                        .openConnection() as HttpURLConnection)
+                    .apply {
+                        connectTimeout = 15_000
+                        readTimeout = 20_000
+                        requestMethod = "GET"
+                    }
+            try {
+                if (connection.responseCode !in 200..299) {
+                    error("Raw Data tab returned HTTP ${connection.responseCode}")
+                }
+                KpiCsvParser.parseRawData(
+                    csv = connection.inputStream.bufferedReader().use { it.readText() },
+                    stationCode = KpiConfig.STATION_CODE,
+                    metricName = metricName,
+                )
+            } finally {
+                connection.disconnect()
+            }
+        }
 }
 
 /**
@@ -99,6 +147,63 @@ object KpiCsvParser {
                     metric("D0 Completion", 88.0, 14, 15, 16),
                 ),
         )
+    }
+
+    fun parseRawData(csv: String, stationCode: String, metricName: String): MetricBreakdown {
+        val records = parseRecords(csv)
+        require(records.isNotEmpty()) { "The Raw Data tab is empty" }
+
+        val header = records.first()
+        val sourceUpdatedAt =
+            Regex("""\d{2}/\d{2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s+[AP]M""")
+                .find(header.getOrNull(1).orEmpty())
+                ?.value
+                .orEmpty()
+        val station =
+            records.firstOrNull { row ->
+                row.getOrNull(1)?.trim() == stationCode || row.getOrNull(8)?.trim() == stationCode
+            } ?: error("Station $stationCode was not found in Raw Data")
+
+        val fifoStatuses =
+            listOf("Arrived at Sorting Hub", "On Hold", "On Vehicle for Delivery")
+                .mapIndexed { index, status ->
+                    StatusCount(status, station.getOrNull(2 + index).toIntOrZero())
+                }
+                .filter { it.count > 0 }
+        val priorStatuses =
+            listOf(
+                    "Arrived at Sorting Hub",
+                    "En-route to Sorting Hub",
+                    "On Hold",
+                    "On Vehicle for Delivery",
+                    "Pending Reschedule",
+                )
+                .mapIndexed { index, status ->
+                    StatusCount(status, station.getOrNull(9 + index).toIntOrZero())
+                }
+                .filter { it.count > 0 }
+        val note =
+            "This tab counts tracking_id by status. It does not list tracking numbers. Import the parcel dump in columns A-L to show successful and pending tracking IDs."
+
+        return if (metricName.startsWith("PRIOR")) {
+            MetricBreakdown(
+                metricName = metricName,
+                title = "PRIOR D0 left to success",
+                totalPending = station.getOrNull(14).toIntOrZero(),
+                statuses = priorStatuses,
+                note = note,
+                sourceUpdatedAt = sourceUpdatedAt,
+            )
+        } else {
+            MetricBreakdown(
+                metricName = metricName,
+                title = "FIFO D0 left to attempt",
+                totalPending = station.getOrNull(5).toIntOrZero(),
+                statuses = fifoStatuses,
+                note = note,
+                sourceUpdatedAt = sourceUpdatedAt,
+            )
+        }
     }
 
     private fun parseRecords(csv: String): List<List<String>> {

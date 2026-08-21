@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.csvreader.data.KpiHistoryRepository
 import com.example.csvreader.data.KpiRepository
 import com.example.csvreader.data.KpiSnapshot
+import com.example.csvreader.data.MetricBreakdown
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,11 +26,23 @@ sealed interface KpiDashboardState {
     data class Error(val message: String) : KpiDashboardState
 }
 
+sealed interface BreakdownUiState {
+    data object Hidden : BreakdownUiState
+
+    data class Loading(val metricName: String) : BreakdownUiState
+
+    data class Ready(val detail: MetricBreakdown) : BreakdownUiState
+
+    data class Failed(val metricName: String, val message: String) : BreakdownUiState
+}
+
 class KpiDashboardViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = KpiRepository()
     private val historyRepository = KpiHistoryRepository(application)
     private val _state = MutableStateFlow<KpiDashboardState>(KpiDashboardState.Loading)
     val state: StateFlow<KpiDashboardState> = _state.asStateFlow()
+    private val _breakdown = MutableStateFlow<BreakdownUiState>(BreakdownUiState.Hidden)
+    val breakdown: StateFlow<BreakdownUiState> = _breakdown.asStateFlow()
     private var latestLiveSnapshot: KpiSnapshot? = null
 
     init {
@@ -99,5 +112,24 @@ class KpiDashboardViewModel(application: Application) : AndroidViewModel(applica
         } else {
             _state.value = current.copy(snapshot = live, selectedDate = null, refreshing = false)
         }
+    }
+
+    fun openBreakdown(metricName: String) {
+        _breakdown.value = BreakdownUiState.Loading(metricName)
+        viewModelScope.launch {
+            runCatching { repository.fetchMetricBreakdown(metricName) }
+                .onSuccess { detail -> _breakdown.value = BreakdownUiState.Ready(detail) }
+                .onFailure { throwable ->
+                    _breakdown.value =
+                        BreakdownUiState.Failed(
+                            metricName = metricName,
+                            message = throwable.message ?: "Unable to load leftover parcels",
+                        )
+                }
+        }
+    }
+
+    fun dismissBreakdown() {
+        _breakdown.value = BreakdownUiState.Hidden
     }
 }

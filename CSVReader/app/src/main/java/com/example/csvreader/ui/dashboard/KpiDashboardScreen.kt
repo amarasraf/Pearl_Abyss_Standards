@@ -1,6 +1,7 @@
 package com.example.csvreader.ui.dashboard
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,6 +45,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.csvreader.data.KpiHistoryRepository
 import com.example.csvreader.data.KpiMetric
 import com.example.csvreader.data.KpiSnapshot
+import com.example.csvreader.data.MetricBreakdown
 import com.example.csvreader.data.fetchedAtLabel
 import java.util.Locale
 
@@ -60,6 +62,7 @@ fun KpiDashboardScreen(
     dashboardViewModel: KpiDashboardViewModel = viewModel(),
 ) {
     val state by dashboardViewModel.state.collectAsStateWithLifecycle()
+    val breakdown by dashboardViewModel.breakdown.collectAsStateWithLifecycle()
     var showHistoryPicker by remember { mutableStateOf(false) }
 
     Box(
@@ -94,6 +97,7 @@ fun KpiDashboardScreen(
                     onSelectHistory = { showHistoryPicker = true },
                     onShowLive = dashboardViewModel::showLive,
                     onOpenDeliveries = onOpenDeliveries,
+                    onOpenMetric = dashboardViewModel::openBreakdown,
                 )
         }
     }
@@ -110,6 +114,13 @@ fun KpiDashboardScreen(
             },
         )
     }
+
+    if (breakdown !is BreakdownUiState.Hidden) {
+        BreakdownDialog(
+            state = breakdown,
+            onDismiss = dashboardViewModel::dismissBreakdown,
+        )
+    }
 }
 
 @Composable
@@ -122,6 +133,7 @@ private fun DashboardContent(
     onSelectHistory: () -> Unit,
     onShowLive: () -> Unit,
     onOpenDeliveries: () -> Unit,
+    onOpenMetric: (String) -> Unit,
 ) {
     Column(
         modifier =
@@ -196,6 +208,7 @@ private fun DashboardContent(
             MetricCard(
                 metric = metric,
                 accent = listOf(Cyan, Indigo, Success)[index % 3],
+                onClick = { onOpenMetric(metric.name) },
             )
         }
 
@@ -298,12 +311,12 @@ private fun HeroCard(snapshot: KpiSnapshot) {
 }
 
 @Composable
-private fun MetricCard(metric: KpiMetric, accent: Color) {
+private fun MetricCard(metric: KpiMetric, accent: Color, onClick: () -> Unit) {
     val current = metric.currentPercent ?: 0.0
     val targetReached = current >= metric.targetPercent
 
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         color = Color.White.copy(alpha = 0.08f),
         shape = RoundedCornerShape(22.dp),
     ) {
@@ -319,7 +332,7 @@ private fun MetricCard(metric: KpiMetric, accent: Color) {
                 Column {
                     Text(metric.name, color = Color.White, fontWeight = FontWeight.Bold)
                     Text(
-                        "Target ${metric.targetPercent.asPercent()}",
+                        "Target ${metric.targetPercent.asPercent()}  •  tap leftover parcels",
                         color = Color.White.copy(alpha = 0.5f),
                         style = MaterialTheme.typography.labelSmall,
                     )
@@ -397,6 +410,70 @@ private fun HistoryDateDialog(
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
     )
+}
+
+@Composable
+private fun BreakdownDialog(state: BreakdownUiState, onDismiss: () -> Unit) {
+    val title =
+        when (state) {
+            is BreakdownUiState.Ready -> state.detail.title
+            is BreakdownUiState.Loading -> "${state.metricName} leftover"
+            is BreakdownUiState.Failed -> "${state.metricName} leftover"
+            BreakdownUiState.Hidden -> "Leftover parcels"
+        }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            when (state) {
+                BreakdownUiState.Hidden -> Unit
+                is BreakdownUiState.Loading ->
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        CircularProgressIndicator(color = Indigo)
+                        Spacer(Modifier.height(12.dp))
+                        Text("Loading leftover parcels…")
+                    }
+                is BreakdownUiState.Failed -> Text(state.message)
+                is BreakdownUiState.Ready -> BreakdownDetail(state.detail)
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
+
+@Composable
+private fun BreakdownDetail(detail: MetricBreakdown) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            text =
+                "${detail.totalPending} leftover parcels${
+                    if (detail.sourceUpdatedAt.isNotBlank()) "  •  ${detail.sourceUpdatedAt}" else ""
+                }",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        if (detail.statuses.isEmpty()) {
+            Text("No leftover status rows were published for this metric.")
+        } else {
+            detail.statuses.forEach { item ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(item.status, modifier = Modifier.weight(1f))
+                    Text(item.count.toString(), fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+        Text(detail.note, style = MaterialTheme.typography.bodySmall)
+    }
 }
 
 @Composable

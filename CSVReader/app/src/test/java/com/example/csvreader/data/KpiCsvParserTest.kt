@@ -27,6 +27,29 @@ class KpiCsvParserTest {
         assertEquals(936, snapshot.metrics[2].leftToTarget)
     }
 
+    @Test
+    fun parseRawData_extractsNilaiFifoAndPriorStatusCounts() {
+        val csv =
+            """
+            "Data as FIFO D0 Left to Attempt ","19/08/2026 10:06:56 AM Left to Attempt COUNTA of tracking_id shp_dest_hub_name","granular_status Arrived at Sorting Hub","On Hold","Data Status On Vehicle for Delivery","Grand Total","SUCCESS","Successfully updated 14628 rows in Columns A-L. PRIOR D0 Left to Success ","Left to Success COUNTA of tracking_id shp_dest_hub_name","granular_status Arrived at Sorting Hub","En-route to Sorting Hub","On Hold","On Vehicle for Delivery","Pending Reschedule","Grand Total"
+            "","C4-SBN-5-83","1418","","","1418","","","C4-SBN-5-83","1419","","","","","1419"
+            "","C4-NIL-5-85","1055","","","1055","","","C4-NIL-5-85","1056","","","","","1056"
+            """.trimIndent()
+
+        val fifo = KpiCsvParser.parseRawData(csv, "C4-NIL-5-85", "FIFO D0")
+        assertEquals("FIFO D0 left to attempt", fifo.title)
+        assertEquals(1055, fifo.totalPending)
+        assertEquals("Arrived at Sorting Hub", fifo.statuses.single().status)
+        assertEquals(1055, fifo.statuses.single().count)
+        assertEquals("19/08/2026 10:06:56 AM", fifo.sourceUpdatedAt)
+
+        val prior = KpiCsvParser.parseRawData(csv, "C4-NIL-5-85", "PRIOR D0")
+        assertEquals("PRIOR D0 left to success", prior.title)
+        assertEquals(1056, prior.totalPending)
+        assertEquals("Arrived at Sorting Hub", prior.statuses.single().status)
+        assertEquals(1056, prior.statuses.single().count)
+    }
+
     @Test(expected = IllegalStateException::class)
     fun parse_rejectsMissingStation() {
         KpiCsvParser.parse(
