@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
+import { MetricCard } from "@/components/metric-card";
 import { SignOutButton } from "@/components/sign-out-button";
 import { authOptions, isAdminEmail } from "@/lib/auth";
 import {
@@ -10,7 +11,7 @@ import {
   logAudit,
   saveSnapshot,
 } from "@/lib/db";
-import { fetchLiveKpi, STATION_CODE, type KpiMetric } from "@/lib/kpi";
+import { fetchLiveKpi, STATION_CODE } from "@/lib/kpi";
 
 const formatPercent = (value: number | null) =>
   value === null ? "No data" : `${value.toFixed(2)}%`;
@@ -29,44 +30,6 @@ const formatTime = (value: string) =>
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
-
-function MetricCard({ metric }: { metric: KpiMetric }) {
-  const progress = Math.min(
-    100,
-    Math.max(0, ((metric.currentPercent ?? 0) / metric.targetPercent) * 100),
-  );
-  const achieved = (metric.currentPercent ?? 0) >= metric.targetPercent;
-
-  return (
-    <article className="glass rounded-2xl p-5">
-      <div className="mb-5 flex items-start justify-between gap-4">
-        <div>
-          <h3 className="font-bold text-white">{metric.name}</h3>
-          <p className="mt-1 text-xs text-slate-500">
-            Target {metric.targetPercent}%
-          </p>
-        </div>
-        <p
-          className={`text-2xl font-black ${achieved ? "text-emerald-300" : "text-cyan-300"}`}
-        >
-          {formatPercent(metric.currentPercent)}
-        </p>
-      </div>
-      <div className="h-2 overflow-hidden rounded-full bg-white/10">
-        <div
-          className={`h-full rounded-full ${achieved ? "bg-emerald-300" : "bg-gradient-to-r from-indigo-500 to-cyan-300"}`}
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-      <div className="mt-4 flex justify-between text-xs">
-        <span className="text-slate-500">{metric.total} attempts</span>
-        <span className={achieved ? "text-emerald-300" : "text-amber-300"}>
-          {achieved ? "Target reached" : `${metric.leftToTarget} left`}
-        </span>
-      </div>
-    </article>
-  );
-}
 
 export default async function Home({
   searchParams,
