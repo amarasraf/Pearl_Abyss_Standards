@@ -49,11 +49,13 @@ class KpiDashboardViewModel(application: Application) : AndroidViewModel(applica
         }
 
         viewModelScope.launch {
-            runCatching { repository.fetchStationKpis() }
-                .onSuccess { snapshot ->
-                    latestLiveSnapshot = snapshot
+            runCatching {
+                    val snapshot = repository.fetchStationKpis()
                     historyRepository.saveLatest(snapshot)
-                    val dates = historyRepository.availableDates()
+                    snapshot to historyRepository.availableDates()
+                }
+                .onSuccess { (snapshot, dates) ->
+                    latestLiveSnapshot = snapshot
                     val current = _state.value as? KpiDashboardState.Ready
                     _state.value =
                         if (returnToLive || current == null) {
