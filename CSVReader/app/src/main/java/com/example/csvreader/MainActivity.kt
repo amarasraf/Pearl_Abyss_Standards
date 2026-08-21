@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -18,21 +19,38 @@ import com.example.csvreader.work.DailyKpiAlertScheduler
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // Check for updates via GitHub silently
-        UpdateManager(this).checkForUpdates()
-        DailyKpiAlertScheduler.schedule(this)
-        if (
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
-                    PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1_000)
+
+        // Render the dashboard before starting optional background integrations.
+        enableEdgeToEdge()
+        setContent {
+            CSVReaderTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background,
+                ) {
+                    MainNavigation()
+                }
+            }
         }
 
-    enableEdgeToEdge()
-    setContent {
-      CSVReaderTheme { Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { MainNavigation() } }
+        window.decorView.post {
+            runCatching { DailyKpiAlertScheduler.schedule(this) }
+                .onFailure { Log.e("Sleipnir", "Unable to schedule KPI alert", it) }
+            runCatching { UpdateManager(this).checkForUpdates() }
+                .onFailure { Log.e("Sleipnir", "Unable to start update check", it) }
+
+            if (
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    ContextCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.POST_NOTIFICATIONS,
+                    ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                runCatching {
+                        requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1_000)
+                    }
+                    .onFailure { Log.e("Sleipnir", "Unable to request notifications", it) }
+            }
+        }
     }
-  }
 }

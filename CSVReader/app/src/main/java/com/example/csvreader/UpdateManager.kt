@@ -20,7 +20,12 @@ class UpdateManager(private val context: Context) {
 
     // You will replace these with your actual GitHub repository details later
     private val versionUrl = "https://raw.githubusercontent.com/amarasraf/Pearl_Abyss_Standards/main/CSVReader/version.json"
-    private val currentVersion = 1.0
+    private val currentVersion: Double
+        get() =
+            context.packageManager
+                .getPackageInfo(context.packageName, 0)
+                .versionName
+                ?.toDoubleOrNull() ?: 1.0
 
     fun checkForUpdates() {
         thread {

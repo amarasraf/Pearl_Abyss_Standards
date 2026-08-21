@@ -95,13 +95,15 @@ class DailyKpiAlertWorker(
         val manager =
             applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channelId = "nilai_kpi_daily"
-        manager.createNotificationChannel(
-            NotificationChannel(
-                channelId,
-                "Daily KPI alerts",
-                NotificationManager.IMPORTANCE_DEFAULT,
-            ).apply { description = "Daily Nilai station KPI summary at 10 PM" },
-        )
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    channelId,
+                    "Daily KPI alerts",
+                    NotificationManager.IMPORTANCE_DEFAULT,
+                ).apply { description = "Daily Nilai station KPI summary at 10 PM" },
+            )
+        }
 
         val openDashboard =
             PendingIntent.getActivity(
