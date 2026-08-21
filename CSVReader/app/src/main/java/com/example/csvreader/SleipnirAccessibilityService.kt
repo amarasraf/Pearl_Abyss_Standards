@@ -7,6 +7,7 @@ import android.os.Build
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.widget.Toast
+import androidx.annotation.RequiresApi
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
 import java.io.ByteArrayOutputStream
@@ -57,13 +58,16 @@ class SleipnirAccessibilityService : AccessibilityService() {
                     }
                 }
             )
-        } else {
-            // Fallback
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            // Android 9 and 10 can save a screenshot through the global action.
             performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT)
             Toast.makeText(this, "Screenshot saved to gallery (Android 10 Fallback)", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "Screenshots require Android 9 or newer", Toast.LENGTH_SHORT).show()
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.R)
     private fun processAndUploadScreenshot(screenshotResult: AccessibilityService.ScreenshotResult) {
         try {
             val hwBuffer = screenshotResult.hardwareBuffer
