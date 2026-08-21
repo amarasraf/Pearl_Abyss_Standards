@@ -16,6 +16,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.example.csvreader.MainActivity
 import com.example.csvreader.R
+import com.example.csvreader.data.KpiHistoryRepository
 import com.example.csvreader.data.KpiRepository
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -58,7 +59,12 @@ class DailyKpiAlertWorker(
 ) : CoroutineWorker(appContext, workerParameters) {
 
     override suspend fun doWork(): Result {
-        val result = runCatching { KpiRepository().fetchStationKpis() }
+        val result =
+            runCatching {
+                KpiRepository().fetchStationKpis().also { snapshot ->
+                    KpiHistoryRepository(applicationContext).saveLatest(snapshot)
+                }
+            }
         showNotification(
             title = "Nilai KPI • 10 PM summary",
             message =
