@@ -12,8 +12,8 @@ android {
         applicationId = "com.example.csvreader"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 3
+        versionName = "2.1"
     }
 
     signingConfigs {
@@ -63,6 +63,7 @@ dependencies {
   implementation(libs.androidx.core.ktx)
   implementation(libs.androidx.lifecycle.runtime.ktx)
   implementation(libs.androidx.activity.compose)
+  implementation("androidx.work:work-runtime-ktx:2.11.2")
 
   // Arch Components
   implementation(libs.androidx.lifecycle.runtime.compose)

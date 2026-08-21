@@ -6,9 +6,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
-import android.os.Build
 import android.os.Environment
 import android.util.Log
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import org.json.JSONObject
 import java.io.File
@@ -20,7 +20,12 @@ class UpdateManager(private val context: Context) {
 
     // You will replace these with your actual GitHub repository details later
     private val versionUrl = "https://raw.githubusercontent.com/amarasraf/Pearl_Abyss_Standards/main/CSVReader/version.json"
-    private val currentVersion = 1.0
+    private val currentVersion: Double
+        get() =
+            context.packageManager
+                .getPackageInfo(context.packageName, 0)
+                .versionName
+                ?.toDoubleOrNull() ?: 1.0
 
     fun checkForUpdates() {
         thread {
@@ -71,11 +76,12 @@ class UpdateManager(private val context: Context) {
             }
         }
         
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(onComplete, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_EXPORTED)
-        } else {
-            context.registerReceiver(onComplete, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
-        }
+        ContextCompat.registerReceiver(
+            context,
+            onComplete,
+            IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
+            ContextCompat.RECEIVER_EXPORTED,
+        )
     }
 
     private fun installApk() {
